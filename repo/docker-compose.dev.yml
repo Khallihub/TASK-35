@@ -1,0 +1,12 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HTTP-only development override — disables HTTPS for local dev convenience:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  web:
+    volumes:
+      # Mount the HTTP-only nginx config, overriding the default HTTPS config
+      - ./nginx.conf:/etc/nginx/conf.d/harborstone.conf:ro
+    ports:
+      - "${WEB_PORT:-80}:80"

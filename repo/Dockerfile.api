@@ -1,0 +1,38 @@
+# ─── Single-stage: ts-node runtime ───────────────────────────────────────────
+# We run TypeScript directly via ts-node so that:
+#   • knex can require() migration/seed files as .ts (isCompiled = false in knex.ts)
+#   • @harborstone/shared resolves to packages/shared/src/index.ts via the
+#     workspace symlink and ts-node transpiles it — no compiled dist/ needed
+#   • No "Unexpected token 'export'" errors from knex importFile
+FROM node:20-alpine
+
+# Native build tools needed for bcrypt, sharp, better-sqlite3
+# ffmpeg provides ffprobe for server-authoritative video codec validation (H.264/AAC)
+RUN apk update && apk add --no-cache python3 make g++ vips-dev ffmpeg
+
+WORKDIR /app
+
+# Copy workspace manifests first for layer-cache efficiency
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY apps/api/package.json ./apps/api/
+COPY packages/shared/package.json ./packages/shared/
+
+# Install ALL deps — devDeps required for ts-node, typescript, @types/*
+RUN npm ci && npm install --no-save @img/sharp-linuxmusl-x64
+
+# Copy source (TypeScript — no compilation step)
+COPY apps/api/src ./apps/api/src
+COPY apps/api/tsconfig.json ./apps/api/
+COPY packages/shared/src ./packages/shared/src
+COPY packages/shared/tsconfig.json ./packages/shared/
+
+# Storage volume mount point
+RUN mkdir -p /data/attachments /data/exports
+
+EXPOSE 3000
+
+# Run from the api workspace directory so relative paths (migrations, seeds) resolve correctly
+WORKDIR /app/apps/api
+
+# --transpile-only skips type-checking for faster startup and avoids @types mismatches at runtime
+CMD ["node", "-r", "ts-node/register/transpile-only", "src/index.ts"]

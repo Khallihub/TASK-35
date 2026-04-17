@@ -1,0 +1,101 @@
+# ─── Dockerfile.test — Multi-target test image ──────────────────────────────
+# Bakes deps + test files so test runs are instant (no npm ci on every run).
+#
+# Targets:
+#   api-test   — Jest backend tests (Node + native deps + SQLite)
+#   web-test   — Vitest frontend unit tests (happy-dom)
+#   web-typecheck — vue-tsc type-check only
+#
+# Usage:
+#   docker build --target api-test  -t harborstone-api-test  -f Dockerfile.test .
+#   docker build --target web-test  -t harborstone-web-test  -f Dockerfile.test .
+#   docker run --rm harborstone-api-test
+#   docker run --rm harborstone-web-test
+
+# ─── Base: shared workspace deps ─────────────────────────────────────────────
+FROM node:20-alpine AS base
+
+# Native build tools for bcrypt, sharp, better-sqlite3
+# ffmpeg provides ffprobe for video codec validation
+RUN apk add --no-cache python3 make g++ vips-dev ffmpeg
+
+WORKDIR /app
+
+# Copy workspace manifests for layer-cache efficiency
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY apps/api/package.json ./apps/api/
+COPY apps/web/package.json ./apps/web/
+COPY packages/shared/package.json ./packages/shared/
+
+# Install ALL deps (including devDeps for test tooling).
+# The lock file was generated on Windows so npm ci skips linux-musl optional
+# deps. After npm ci, install musl-specific native binaries into a temp dir
+# and copy them into node_modules (npm install --no-save in workspace roots
+# with a lock file can fail due to "idealTree" conflicts).
+RUN npm ci
+RUN cd /tmp && npm init -y > /dev/null \
+    && npm install --no-save \
+       @img/sharp-linuxmusl-x64@0.33.5 @img/sharp-libvips-linuxmusl-x64@1.0.4 \
+       @rollup/rollup-linux-x64-musl \
+       @rolldown/binding-linux-x64-musl@1.0.0-rc.15 2>/dev/null; \
+    mkdir -p /app/node_modules/@img && cp -r /tmp/node_modules/@img/* /app/node_modules/@img/ 2>/dev/null; \
+    mkdir -p /app/node_modules/@rollup && cp -r /tmp/node_modules/@rollup/* /app/node_modules/@rollup/ 2>/dev/null; \
+    mkdir -p /app/node_modules/@rolldown && cp -r /tmp/node_modules/@rolldown/* /app/node_modules/@rolldown/ 2>/dev/null; \
+    rm -rf /tmp/node_modules /tmp/package.json /tmp/package-lock.json; true
+
+# Shared package (used by both api and web)
+COPY packages/shared/src ./packages/shared/src
+COPY packages/shared/tsconfig.json ./packages/shared/
+
+# ─── API test image ──────────────────────────────────────────────────────────
+FROM base AS api-test
+
+COPY apps/api/src ./apps/api/src
+COPY apps/api/tests ./apps/api/tests
+COPY apps/api/tsconfig.json apps/api/jest.config.cjs ./apps/api/
+
+WORKDIR /app/apps/api
+CMD ["npx", "jest", "--runInBand", "--forceExit"]
+
+# ─── Web test image (Vitest) ─────────────────────────────────────────────────
+FROM base AS web-test
+
+COPY apps/web/src ./apps/web/src
+COPY apps/web/tests ./apps/web/tests
+COPY apps/web/tsconfig.json apps/web/vite.config.ts ./apps/web/
+
+WORKDIR /app/apps/web
+CMD ["npx", "vitest", "run"]
+
+# ─── Web type-check image ────────────────────────────────────────────────────
+FROM base AS web-typecheck
+
+COPY apps/web/src ./apps/web/src
+COPY apps/web/tests ./apps/web/tests
+COPY apps/web/tsconfig.json apps/web/vite.config.ts ./apps/web/
+
+WORKDIR /app/apps/web
+CMD ["npx", "vue-tsc", "--noEmit"]
+
+# ─── E2E test image (Playwright + Chromium) ──────────────────────────────────
+FROM mcr.microsoft.com/playwright:v1.44.0-jammy AS e2e
+
+WORKDIR /app
+
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY apps/web/package.json ./apps/web/
+COPY packages/shared/package.json ./packages/shared/
+
+RUN npm ci
+
+# Install Chromium browser matching the @playwright/test version in package.json
+RUN npx --workspace=apps/web playwright install --with-deps chromium
+
+COPY apps/web/src ./apps/web/src
+COPY apps/web/e2e ./apps/web/e2e
+COPY apps/web/tsconfig.json apps/web/vite.config.ts apps/web/playwright.config.ts ./apps/web/
+COPY packages/shared/src ./packages/shared/src
+COPY packages/shared/tsconfig.json ./packages/shared/
+
+WORKDIR /app/apps/web
+CMD ["npx", "playwright", "test", "--reporter=list"]

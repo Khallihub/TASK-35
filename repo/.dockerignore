@@ -1,0 +1,40 @@
+# Dependencies (re-installed inside Docker)
+node_modules
+**/node_modules
+
+# Compiled output (re-built inside Docker)
+**/dist
+apps/web/dist
+
+# Test artifacts
+**/coverage
+**/*.test.ts
+**/tests/
+
+# Dev tooling
+**/.eslintrc*
+**/.prettierrc*
+**/jest.config*
+
+# Secrets and local config
+.env
+.env.*
+*.local
+
+# Editor / OS noise
+.vscode
+.idea
+**/.DS_Store
+**/Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Docker files themselves (no recursive embedding needed)
+Dockerfile*
+docker-compose*
+
+# Data directories
+data/
+sessions/

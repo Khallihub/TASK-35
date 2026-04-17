@@ -1,0 +1,25 @@
+:root {
+  --color-primary: #1a4b8c;
+  --color-primary-hover: #15397a;
+  --color-secondary: #2d7dd2;
+  --color-accent: #e8a320;
+  --color-success: #28a745;
+  --color-warning: #ffc107;
+  --color-danger: #dc3545;
+  --color-danger-hover: #c82333;
+  --color-text: #1a1a2e;
+  --color-text-muted: #6c757d;
+  --color-border: #dee2e6;
+  --color-surface: #ffffff;
+  --color-background: #f5f7fa;
+  --sidebar-width: 240px;
+  --sidebar-collapsed-width: 56px;
+  --topbar-height: 56px;
+  --radius: 6px;
+  --radius-lg: 10px;
+  --shadow: 0 1px 3px rgba(0,0,0,.12);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.15);
+  --font: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Fira Code', 'Cascadia Code', monospace;
+  --transition: 150ms ease;
+}

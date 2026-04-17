@@ -1,0 +1,16 @@
+/**
+ * Shared error codes used across API and frontend packages.
+ * Must stay in sync with apps/api/src/errors/index.ts.
+ */
+export enum ErrorCodes {
+  INTERNAL_ERROR = 'INTERNAL_ERROR',
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
+  NOT_FOUND = 'NOT_FOUND',
+  UNAUTHORIZED = 'UNAUTHORIZED',
+  FORBIDDEN = 'FORBIDDEN',
+  CONFLICT = 'CONFLICT',
+  VERSION_CONFLICT = 'VERSION_CONFLICT',
+  ILLEGAL_TRANSITION = 'ILLEGAL_TRANSITION',
+  RATE_LIMITED = 'RATE_LIMITED',
+  IDEMPOTENCY_CONFLICT = 'IDEMPOTENCY_CONFLICT',
+}

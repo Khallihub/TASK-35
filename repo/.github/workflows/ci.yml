@@ -1,0 +1,85 @@
+name: CI
+
+# PRD §Phase-0 exit: every merge to main must pass typecheck, lint, unit
+# tests, and build for both apps. This workflow gates merges by running:
+#   1. typecheck for the API and the web app
+#   2. unit tests for the API (Jest) and the web app (Vitest)
+#   3. production builds for both
+# The Playwright E2E suite is opt-in (run on demand or nightly) because it
+# depends on the full docker compose stack; see run_tests.sh --e2e.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Manual trigger for the opt-in Playwright E2E job. The README documents
+  # this path ("The Playwright suite is opt-in via workflow_dispatch so
+  # regular PRs stay fast.") — keep the trigger list in sync with the docs.
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API (typecheck + tests + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: repo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: repo/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: API typecheck
+        run: npm --workspace @harborstone/api run typecheck
+      - name: API unit tests
+        run: npm --workspace @harborstone/api test -- --runInBand
+      - name: API build
+        run: npm --workspace @harborstone/api run build
+
+  web:
+    name: Web (typecheck + tests + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: repo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: repo/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Web typecheck
+        run: npm --workspace @harborstone/web run typecheck
+      - name: Web unit tests
+        run: npm --workspace @harborstone/web test
+      - name: Web build
+        run: npm --workspace @harborstone/web run build
+
+  e2e:
+    # On-demand: run Playwright against the full compose stack via run_tests.sh.
+    # Skipped on regular PRs to keep CI fast; trigger via workflow_dispatch.
+    name: E2E (Playwright)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: repo
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run end-to-end suite
+        run: bash run_tests.sh --e2e

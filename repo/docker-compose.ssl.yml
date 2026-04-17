@@ -1,0 +1,17 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Production TLS override — mount your own CA-signed certificates:
+#   docker compose -f docker-compose.yml -f docker-compose.ssl.yml up --build
+#
+# Place your cert files at:
+#   ./certs/harborstone.crt
+#   ./certs/harborstone.key
+#
+# Without this overlay, the default startup auto-generates a self-signed cert.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  web:
+    volumes:
+      # Mount CA-signed certificate and key (overrides auto-generated self-signed)
+      - ./certs/harborstone.crt:/etc/ssl/certs/harborstone.crt:ro
+      - ./certs/harborstone.key:/etc/ssl/private/harborstone.key:ro

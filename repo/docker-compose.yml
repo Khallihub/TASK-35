@@ -1,0 +1,100 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HarborStone Listings Operations Suite
+# Single-command startup: docker compose up --build
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── MySQL 8 ────────────────────────────────────────────────────────────────
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-harborstone_root}
+      MYSQL_DATABASE:      ${DB_NAME:-harborstone}
+      MYSQL_USER:          ${DB_USER:-harborstone}
+      MYSQL_PASSWORD:      ${DB_PASSWORD:-harborstone_pass}
+    volumes:
+      - db_data:/var/lib/mysql
+      # Optional: mount a custom MySQL config for performance tuning
+      # - ./mysql.cnf:/etc/mysql/conf.d/harborstone.cnf:ro
+    ports:
+      - "${DB_PORT_EXPOSED:-3306}:3306"
+    healthcheck:
+      # CMD-SHELL runs through /bin/sh so $MYSQL_USER / $MYSQL_PASSWORD are
+      # expanded from the container's own environment variables (set above).
+      # mysqladmin ping returns 0 only when the server is fully accepting connections.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+
+  # ── Koa API ────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV:        production
+
+      # Database
+      DB_HOST:         db
+      DB_PORT:         3306
+      DB_USER:         ${DB_USER:-harborstone}
+      DB_PASSWORD:     ${DB_PASSWORD:-harborstone_pass}
+      DB_NAME:         ${DB_NAME:-harborstone}
+
+      # Security — CHANGE in production
+      JWT_SECRET:      ${JWT_SECRET:-CHANGE_ME_BEFORE_GOING_LIVE_32chars}
+      BCRYPT_COST:     ${BCRYPT_COST:-12}
+
+      # Server
+      PORT:            3000
+      LOG_LEVEL:       ${LOG_LEVEL:-info}
+      LOG_PRETTY:      "false"
+      TZ_IANA:         ${TZ_IANA:-America/New_York}
+
+      # File storage (mapped to the named volume below)
+      STORAGE_PATH:    /data/attachments
+
+      # Seed user passwords — used once on first startup; change before going live
+      SEED_ADMIN_PASSWORD:    ${SEED_ADMIN_PASSWORD:-Admin@harborstone1}
+      SEED_OPS_PASSWORD:      ${SEED_OPS_PASSWORD:-Ops@harborstone1}
+      SEED_MERCHANT_PASSWORD: ${SEED_MERCHANT_PASSWORD:-Merchant@harborstone1}
+      SEED_AGENT_PASSWORD:    ${SEED_AGENT_PASSWORD:-Agent@harborstone1}
+    volumes:
+      - attachments:/data/attachments
+    # API is internal-only; the web container proxies /api → api:3000
+    # Expose only if you need direct API access from the host
+    # ports:
+    #   - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Vue 3 Frontend (nginx) ─────────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-80}:80"
+      - "${WEB_SSL_PORT:-443}:443"
+
+volumes:
+  db_data:
+    driver: local
+  attachments:
+    driver: local
